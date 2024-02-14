@@ -1,0 +1,11 @@
+#!/bin/bash
+set -o nounset
+
+# state_file
+source state_file.txt
+
+# terminate the instance
+aws ec2 terminate-instances --instance-ids ${instance_id}
+aws ec2 wait instance-terminated --instance-ids ${instance_id}
+
+echo the instance with ID ${instance_id} has been terminated. 

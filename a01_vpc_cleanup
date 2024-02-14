@@ -1,0 +1,51 @@
+#!/bin/bash
+set -o nounset
+
+# Check if state_file.txt exists
+if [ ! -f "state_file.txt" ]; then
+  echo "Error: state_file.txt not found."
+  exit 1
+fi
+
+# Source state_file
+source state_file.txt
+
+# Check if vpc_id is set
+if [ -z "${vpc_id}" ]; then
+  echo "Error: vpc_id is not set in state_file.txt."
+  exit 1
+fi
+
+# Check AWS CLI installation and configuration
+if ! command -v aws &> /dev/null; then
+  echo "Error: AWS CLI is not installed."
+  exit 1
+fi
+
+# Verify AWS CLI configuration
+if ! aws configure get aws_access_key_id &> /dev/null; then
+  echo "Error: AWS CLI is not properly configured. Run 'aws configure' to set up credentials."
+  exit 1
+fi
+
+# Delete the security group
+aws ec2 delete-security-group --group-id "${security_group_id}"
+
+# Disassociate and delete the route table
+aws ec2 disassociate-route-table --association-id "${rt_association_id}"
+aws ec2 delete-route-table --route-table-id "${route_table_id}"
+
+# Detach and delete the internet gateway
+aws ec2 detach-internet-gateway --internet-gateway-id "${gateway_id}" --vpc-id "${vpc_id}"
+aws ec2 delete-internet-gateway --internet-gateway-id "${gateway_id}"
+
+# Delete the subnet
+aws ec2 delete-subnet --subnet-id "${subnet_id}"
+
+# Delete the VPC
+aws ec2 delete-vpc --vpc-id "${vpc_id}"
+
+# Remove the state_file.txt
+rm -f state_file.txt
+
+echo "VPC and related resources have been deleted."

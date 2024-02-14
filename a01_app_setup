@@ -1,0 +1,102 @@
+#!/bin/bash
+set -o nounset
+
+# state_file
+source state_file.txt
+
+SSH_KEY_FILE="/home/kaylyn/.ssh/acit_4640"
+REMOTE_HOST=$ec2_dns_name
+REMOTE_USER="ubuntu"
+frontend_local_path="./app_setup/frontend/index.html"
+backend_local_path="./app_setup/backend/"
+default_local_path="./app_setup/default"
+service_local_path="./app_setup/backend.service"
+#nginx_default_from_path="/home/ubuntu/default"
+#nginx_default_to_path="/etc/nginx/sites-available/default"
+service_to_path="/etc/systemd/system/backend.service"
+frontend_files_to_path="/a01/web_root"
+
+
+# local computer --------------------
+
+# ssh into the ec2 instance
+ssh -vi "$SSH_KEY_FILE" \
+   -o UserKnownHostsFile=/dev/null \
+   -o StrictHostKeyChecking=no \
+   "$REMOTE_USER"@"$REMOTE_HOST" <<EOF
+
+# ubuntu user--------------------
+# Update the system package list
+sudo apt update
+
+# Install nginx
+sudo apt install -y nginx
+sudo apt install -y python3-pip
+sudo apt install -y libmysqlclient-dev
+sudo apt install -y python3-dev default-libmysqlclient-dev
+sudo apt install -y pkg-config
+sudo apt install -y mysql-server
+
+# MySql Setup
+sudo mysql -u root <<DELIM
+CREATE DATABASE backend;
+CREATE USER 'example'@'%' IDENTIFIED BY 'secure';
+GRANT ALL PRIVILEGES ON backend.* TO 'example'@'%';
+FLUSH PRIVILEGES;
+exit
+DELIM
+
+# Directory creation and change the owner
+sudo mkdir /web_root
+sudo chown ubuntu /web_root
+
+EOF
+
+# local computer --------------------
+
+# transfer required files to the ec2 instance
+scp -i "$SSH_KEY_FILE" "$frontend_local_path" "$REMOTE_USER"@"$REMOTE_HOST":/web_root
+scp -r -i "$SSH_KEY_FILE" "$backend_local_path" "$REMOTE_USER"@"$REMOTE_HOST":
+scp -i "$SSH_KEY_FILE" "$default_local_path" "$REMOTE_USER"@"$REMOTE_HOST":
+scp -i "$SSH_KEY_FILE" "$service_local_path" "$REMOTE_USER"@"$REMOTE_HOST":
+
+
+# ssh into the ec2 instance
+ssh -vi "$SSH_KEY_FILE" \
+   -o UserKnownHostsFile=/dev/null \
+   -o StrictHostKeyChecking=no \
+   "$REMOTE_USER"@"$REMOTE_HOST" <<EOF
+
+# change nginx default file
+sudo cp /home/ubuntu/default /etc/nginx/sites-available/default
+sudo systemctl restart nginx
+
+sudo rm /usr/lib/python3.11/EXTERNALLY-MANAGED
+
+# create a01 user
+sudo useradd -m -d /a01 a01
+
+# transger backend files to a01 
+sudo mkdir -p /a01/app
+sudo mv backend/* /a01/app
+sudo chown -R a01 /a01/app
+
+# switch the user to a01
+sudo su - a01 <<DELIM
+
+# a01 user--------------------
+
+# install all the requirements from requirements.txt
+pip3 install --user -r /a01/app/requirements.txt
+
+DELIM
+
+# ubuntu user--------------------
+
+# move the backend.service file and system reload
+sudo cp /home/ubuntu/backend.service "$service_to_path"
+sudo systemctl daemon-reload
+sudo systemctl enable backend
+sudo systemctl start backend
+
+EOF

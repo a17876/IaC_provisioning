@@ -1,0 +1,175 @@
+#!/bin/bash
+set -o nounset
+
+vpc_cidr="172.16.0.0/16"
+vpc_name="a1_vpc"
+project_name="a1_project"
+route_table_name="a1_web_rt_1"
+subnet_cidr="172.16.1.0/24"
+subnet_name="a1_sn_web_1"
+gateway_name="a1_gw_1"
+default_cidr="0.0.0.0/0"
+bcit_cidr="142.232.0.0/16"
+az="us-west-2b"
+home_cidr="207.216.90.233/32"
+security_group_name="a1_web_sg1"  
+security_group_desc="Security group for simple web application" 
+
+
+# Create VPC and Store the ID
+vpc_id=$(
+    aws ec2 create-vpc \
+    --cidr-block $vpc_cidr \
+    --query Vpc.VpcId \
+    --output text
+    )
+
+# Name the VPC, and add Project
+aws ec2 create-tags \
+    --resources $vpc_id \
+    --tags Key=Name,Value=$vpc_name Key=Project,Value="${project_name}"
+
+echo "$vpc_name is created in $project_name"
+
+# Enable DNS Hostnames for EC2 instances
+aws ec2 modify-vpc-attribute \
+ --vpc-id "${vpc_id}" \
+ --enable-dns-hostnames "{\"Value\":true}"
+
+# Create Route-Table and store ID
+route_table_id=$(
+    aws ec2 create-route-table \
+    --vpc-id $vpc_id \
+    --query RouteTable.RouteTableId \
+    --output text
+    )
+
+# Set Routing Table Name and Project
+aws ec2 create-tags  \
+    --resources $route_table_id  \
+    --tags Key=Name,Value=$route_table_name Key=Project,Value="${project_name}"
+
+echo "$route_table_name is created in $project_name"
+
+# Create Subnet and Store the ID
+subnet_id=$(
+    aws ec2 create-subnet  \
+    --vpc-id $vpc_id \
+    --cidr-block $subnet_cidr \
+    --availability-zone $az \
+    --query Subnet.SubnetId  \
+    --output text
+    )
+
+# Name the Subnet and Project
+aws ec2 create-tags \
+    --resources "${subnet_id}" \
+    --tags Key=Name,Value="${subnet_name}" Key=Project,Value="${project_name}"
+
+aws ec2 modify-subnet-attribute \
+  --map-public-ip-on-launch \
+  --subnet-id $subnet_id
+  
+
+
+echo "$subnet_name is created in $project_name"
+
+# Create Internet Gateway Storing the ID
+gateway_id=$(
+    aws ec2 create-internet-gateway \
+    --query InternetGateway.InternetGatewayId \
+    --output text
+    )
+
+# Set gateway Name
+aws ec2 create-tags \
+    --resources $gateway_id \
+    --tags Key=Name,Value=$gateway_name Key=Project,Value="${project_name}"
+
+echo "$gateway_name is created in $project_name"
+
+# Attach Internet Gateway to VPC
+aws ec2 attach-internet-gateway \
+    --internet-gateway-id $gateway_id \
+    --vpc-id $vpc_id
+
+echo "$gateway_name is attached in $vpc_name"
+
+# Associate Routing Table with Subnet and store association ID
+rt_association_id=$(
+    aws ec2 associate-route-table \
+    --route-table-id $route_table_id \
+    --subnet-id $subnet_id \
+    --query AssociationId \
+    --output text
+    )
+
+echo "$subnet_name and $route_table_name is associated"
+
+# Add default Route to Routing Table
+aws ec2 create-route \
+    --route-table-id $route_table_id \
+    --destination-cidr-block $default_cidr \
+    --gateway-id $gateway_id \
+    --output text
+
+# Create security Group and store ID
+security_group_id=$(
+    aws ec2 create-security-group \
+    --group-name "$security_group_name" \
+    --description "$security_group_desc" \
+    --vpc-id $vpc_id \
+    --query GroupId \
+    --output text
+    )
+
+echo "$security_group_name is created"
+
+
+# Create Inbound rule to allow inbound ssh from BCIT
+aws ec2 authorize-security-group-ingress \
+	--group-id $security_group_id \
+	--protocol tcp \
+	--port 22 \
+	--cidr $bcit_cidr
+
+# Create Inbound rule to allow inbound ssh from home
+aws ec2 authorize-security-group-ingress \
+	--group-id $security_group_id \
+	--protocol tcp \
+	--port 22 \
+	--cidr $home_cidr
+	
+# Create Inbound rule to allow inbound http from BCIT
+aws ec2 authorize-security-group-ingress \
+	--group-id $security_group_id \
+	--protocol tcp \
+	--port 80 \
+	--cidr $bcit_cidr
+	
+# Create Inbound rule to allow inbound http from home
+aws ec2 authorize-security-group-ingress \
+	--group-id $security_group_id \
+	--protocol tcp \
+	--port 80 \
+	--cidr $home_cidr
+	
+# aws ec2 authorize-security-group-egress \
+#     --group-id $security_group_id \
+#     --protocol -1 \
+#     --cidr 0.0.0.0/0
+
+# Create Outbound rule to allow outbound from anywhere
+echo "Inbound / Outbound Rules are creates"
+
+
+# create state_file.txt
+echo "vpc_id=$vpc_id" >> state_file.txt
+echo "route_table_id=$route_table_id" >> state_file.txt
+echo "subnet_id=$subnet_id" >> state_file.txt
+echo "gateway_id=$gateway_id" >> state_file.txt
+echo "rt_association_id=$rt_association_id" >> state_file.txt
+echo "security_group_id=$security_group_id" >> state_file.txt
+
+
+echo "Resources are created and stored in state_file."

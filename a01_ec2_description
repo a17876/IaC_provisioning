@@ -1,0 +1,9 @@
+#!/bin/bash
+set -o nounset
+
+# Get the ID of the EC2 instance from state_file.txt
+source state_file.txt
+
+# Print the details of the EC2 instance
+echo "EC2 Instance Details:"
+aws ec2 describe-instances --instance-ids $instance_id

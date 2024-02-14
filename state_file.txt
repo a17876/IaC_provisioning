@@ -1,0 +1,10 @@
+vpc_id=vpc-099579dace7dde067
+route_table_id=rtb-011a02011d00bde04
+subnet_id=subnet-09d24e6b7a851bb3e
+gateway_id=igw-06ef1e129ada89292
+rt_association_id=rtbassoc-0216c344629a28694
+security_group_id=sg-042fe3c5eee6b598d
+
+instance_id=i-0b30e2f606b30c943
+ec2_dns_name=ec2-54-202-16-67.us-west-2.compute.amazonaws.com
+ec2_public_ip=54.202.16.67
